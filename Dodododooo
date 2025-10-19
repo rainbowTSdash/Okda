@@ -1,0 +1,65 @@
+from .. import loader, utils
+from telethon.tl.types import PeerUser, PeerChat, PeerChannel
+import asyncio
+
+@loader.tds
+class MassSendMod(loader.Module):
+    strings = {
+        "name": "MassSender",
+        "chats_set": "✅ Список чатов для рассылки обновлен!",
+        "no_text": "❌ Укажите текст для рассылки!",
+        "sending": "📤 Начинаю рассылку...",
+        "sent_to": "✅ Отправлено в чат {chat}",
+        "error": "❌ Ошибка при отправке в чат {chat}: {error}",
+        "no_chats": "❌ Список чатов пуст! Настройте чаты командой .rcfg",
+        "done": "✅ Рассылка завершена!"
+    }
+
+    def __init__(self):
+        self.config = loader.ModuleConfig(
+            "CHATS", [], "Список юзернеймов чатов для рассылки (@username)"
+        )
+
+    @loader.command()
+    async def rcfg(self, message):
+        args = utils.get_args_raw(message).split()
+        chat_usernames = []
+        
+        for arg in args:
+            if arg.startswith('@'):
+                try:
+                    entity = await self.client.get_entity(arg)
+                    if isinstance(entity, (PeerUser, PeerChat, PeerChannel)):
+                        chat_usernames.append(arg)
+                except (ValueError, Exception):
+                    continue
+                
+        self.config["CHATS"] = chat_usernames
+        await utils.answer(message, self.strings["chats_set"])
+
+    @loader.command()
+    async def rass(self, message):
+        text = utils.get_args_raw(message)
+        
+        if not text:
+            await utils.answer(message, self.strings["no_text"])
+            return
+            
+        if not self.config["CHATS"]:
+            await utils.answer(message, self.strings["no_chats"])
+            return
+            
+        await utils.answer(message, self.strings["sending"])
+        
+        for chat in self.config["CHATS"]:
+            try:
+                await self.client.send_message(chat, text)
+                await utils.answer(message, self.strings["sent_to"].format(chat=chat))
+                await asyncio.sleep(1)
+            except Exception as e:
+                await utils.answer(message, self.strings["error"].format(
+                    chat=chat,
+                    error=str(e)
+                ))
+                
+        await utils.answer(message, self.strings["done"])
